@@ -1,32 +1,34 @@
-# MultiButton
+# Single IO Drive
 
 ## 简介
-MultiButton 是一个小巧简单易用的事件驱动型按键驱动模块，可无限量扩展按键，按键事件的回调异步处理方式可以简化你的程序结构，去除冗余的按键处理硬编码，让你的按键业务逻辑更清晰。
+Single IO Drive 是一个单io控制设备驱动,控制设备开关.支持自定义频率开关,延迟打开关闭.可使单一控制开关设备集中在一起管理,简洁程序结构.
 
 ## 使用方法
-1.先申请一个按键结构
+1.先申请一个单io结构,在添加io设备的编号
 
 ```c
-struct Button button1;
+struct Single_io_Drive_t io_drive1; //在 user_single_io_drive.c
+
+enum Single_io_drive_IDs { //单IO设备ID 在 user_single_io_drive.h
+    io_drive1_id,
+};
 ```
-2.初始化按键对象，绑定按键的GPIO电平读取接口**read_button_pin()** ，后一个参数设置有效触发电平
+2.初始化io设备硬件与软件参数
 
 ```c
-button_init(&button1, read_button_pin, 0, 0);
-```
-3.注册按键事件
+void User_Single_io_Drive_Init(void)
+{
+    //单IO设备IO硬件初始化，在单IO设备的硬件现实文件
+    LED_Init();
 
-```c
-button_attach(&button1, SINGLE_CLICK, Callback_SINGLE_CLICK_Handler);
-button_attach(&button1, DOUBLE_CLICK, Callback_DOUBLE_Click_Handler);
-...
-```
-4.启动按键
+    //初始化单io设备结构体
+    Single_io_Drive_init(&io_drive1,io_drive1_id,LED0_Open,LED0_Close); // LED0_Open 打开设备函数, LED0_Close 关闭设备函数
 
-```c
-button_start(&button1);
+    //启动单io设备扫描
+    Single_io_Drive_start(&io_drive1);
+}
 ```
-5.设置一个5ms间隔的定时器循环调用后台处理函数
+3.设置一个5ms间隔的定时器循环调用后台处理函数
 
 ```c
 while(1) {
@@ -34,100 +36,72 @@ while(1) {
     if(timer_ticks == 5) {
         timer_ticks = 0;
 
-        button_ticks();
+        Single_io_Drive_ticks();
     }
 }
 ```
 
 ## 特性
 
-MultiButton 使用C语言实现，基于面向对象方式设计思路，每个按键对象单独用一份数据结构管理：
+Single io Drive 使用C语言实现，基于面向对象方式设计思路，每个io设备对象单独用一份数据结构管理：
 
 ```c
-struct Button {
-	uint16_t ticks;
-	uint8_t  repeat: 4;
-	uint8_t  event : 4;
-	uint8_t  state : 3;
-	uint8_t  debounce_cnt : 3;
-	uint8_t  active_level : 1;
-	uint8_t  button_level : 1;
-	uint8_t  button_id;
-	uint8_t  (*hal_button_Level)(uint8_t  button_id_);
-	BtnCallback  cb[number_of_event];
-	struct Button* next;
-};
+typedef struct Single_io_Drive_t {
+    uint16_t delay_operation_time;   //延迟操作的时间
+    uint16_t loop_Open_time;	     //循环开关的打开时间
+    uint16_t loop_Close_time;	     //循环开关的关闭时间
+    uint16_t loop_count;	     //时间相关的计数标志
+    uint8_t  device_id;              //设备编号
+    uint8_t  operation_mode : 4;     //操作的模式
+    uint8_t  device_state : 1;       //设备当前状态
+    uint8_t  time_start_flag : 1;    //时间相关的计数标志
+    uint8_t  reserve : 2;            //保留
+    void  (*set_open_device)(void);  //打开设备的函数
+    void  (*set_close_device)(void); //关闭设备的函数
+    struct Single_io_Drive_t* next;  //单链表结构指针
+}Single_io_Drive_t;
 ```
-这样每个按键使用单向链表相连，依次进入 button_handler(struct Button* handle) 状态机处理，所以每个按键的状态彼此独立。
+这样每个io设备使用单向链表相连，依次进入 Single_io_Drive_ticks()处理，所以每个io设备的状态彼此独立。
 
 
-## 按键事件
+## io设备操作模式
 
-事件 | 说明
+设备操作 | 说明
 ---|---
-PRESS_DOWN | 按键按下，每次按下都触发
-PRESS_UP | 按键弹起，每次松开都触发
-PRESS_REPEAT | 重复按下触发，变量repeat计数连击次数
-SINGLE_CLICK | 单击按键事件
-DOUBLE_CLICK | 双击按键事件
-LONG_PRESS_START | 达到长按时间阈值时触发一次
-LONG_PRESS_HOLD | 长按期间一直触发
+OPEN_DEVICE_NO_DELAY | 立即打开设备
+CLOSE_DEVICE_NO_DELAY | 立即关闭设备
+OPEN_DEVICE_DELAY | 延迟一定时间后打开设备
+CLOSE_DEVICE_DELAY | 延迟一定时间后关闭设备
+OPEN_AND_CLOSE_LOOP_NO_DELAY | 立即打开设备,并且按设定时间循环开关设备
+CLOSE_OPEN_AND_LOOP_NO_DELAY | 立即关闭设备,并且按设定时间循环开关设备
+OPEN_AND_CLOSE_LOOP_DELAY | 延迟一定时间后打开设备,并且按设定时间循环开关设备
+CLOSE_OPEN_AND_LOOP_DELAY | 延迟一定时间后关闭设备,并且按设定时间循环开关设备
 
+## io设备状态
+
+状态 | 说明
+---|---
+DEVICE_OPEN_STATE | 当前设备是打开的
+DEVICE_CLOSE_STATE | 当前设备是关闭的
+DEVICE_INEXISTENT_STATE | 当前设备不存在
 
 ## Examples
 
 ```c
-#include "button.h"
+#include "user_single_io_drive.h"
 
-unit8_t btn1_id = 0;
-
-struct Button btn1;
-
-uint8_t read_button_GPIO(uint8_t button_id)
+int main(void)
 {
-	// you can share the GPIO read function with multiple Buttons
-	switch(button_id)
-	{
-		case btn1_id:
-			return HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
-			break;
-
-		default:
-			return 0;
-			break;
-	}
-}
-void BTN1_PRESS_DOWN_Handler(void* btn)
-{
-	//do something...
-}
-
-void BTN1_PRESS_UP_Handler(void* btn)
-{
-	//do something...
+    User_Single_io_Drive_Init();    //单io设备初始化	
+	
+    while(1)
+    {
+        Single_io_Drive_ticks();//run
+	delay_ms(5);   
+    }
 }
 
 ...
 
-int main()
-{
-	button_init(&btn1, read_button_GPIO, 0, btn1_id);
-	button_attach(&btn1, PRESS_DOWN,       BTN1_PRESS_DOWN_Handler);
-	button_attach(&btn1, PRESS_UP,         BTN1_PRESS_UP_Handler);
-	button_attach(&btn1, PRESS_REPEAT,     BTN1_PRESS_REPEAT_Handler);
-	button_attach(&btn1, SINGLE_CLICK,     BTN1_SINGLE_Click_Handler);
-	button_attach(&btn1, DOUBLE_CLICK,     BTN1_DOUBLE_Click_Handler);
-	button_attach(&btn1, LONG_PRESS_START, BTN1_LONG_PRESS_START_Handler);
-	button_attach(&btn2, LONG_PRESS_HOLD,  BTN1_LONG_PRESS_HOLD_Handler);
-	button_start(&btn1);
-
-	//make the timer invoking the button_ticks() interval 5ms.
-	//This function is implemented by yourself.
-	__timer_start(button_ticks, 0, 5);
-
-	while(1)
-	{}
-}
-```
 
 
