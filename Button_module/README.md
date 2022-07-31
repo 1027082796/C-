@@ -98,6 +98,12 @@ void User_Button_Init(void)
 5.设置一个5ms间隔的定时器循环调用后台处理函数
 
 ```c
+//需要修改的参数,在 multi_button_drive.h
+#define BUTTON_TICKS_INTERVAL    5	//ms, 按键扫描的时基
+#define DEBOUNCE_TICKS    3	//范围:1-8, 消抖次数,基于扫描时基
+#define SHORT_TICKS       (300 /BUTTON_TICKS_INTERVAL)  //单击触发时间
+#define LONG_TICKS        (1000 /BUTTON_TICKS_INTERVAL) //长按开始触发时间
+
 while(1) {
     ...
     if(timer_ticks == 5) {
