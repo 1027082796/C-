@@ -31,6 +31,7 @@ void User_Single_io_Drive_Init(void)
 3.设置一个5ms间隔的定时器循环调用后台处理函数
 
 ```c
+//#define SINGLE_IO_TICKS_INTERVAL    5	//ms,  扫描时基, 在 single_io_drive.h
 while(1) {
     ...
     if(timer_ticks == 5) {
