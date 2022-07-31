@@ -70,7 +70,7 @@ void button1_callback(void *button)
 	    	break; 
 	}
 }
-...
+```
 4.初始化按键参数
 
 ```c
