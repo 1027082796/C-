@@ -2,29 +2,99 @@
 
 ## 简介
 MultiButton 是一个小巧简单易用的事件驱动型按键驱动模块，可无限量扩展按键，按键事件的回调异步处理方式可以简化你的程序结构，去除冗余的按键处理硬编码，让你的按键业务逻辑更清晰。
-1111111111
+
 ## 使用方法
-1.先申请一个按键结构
+1.先申请一个按键结构,在添加按键编号
 
 ```c
-struct Button button1;
+struct Button btn1; //在user_multi_button_drive.c
+
+enum Button_IDs { //按键ID  在user_multi_button_drive.h
+	btn1_id,
+};
 ```
-2.初始化按键对象，绑定按键的GPIO电平读取接口**read_button_pin()** ，后一个参数设置有效触发电平
+2.添加按键读取函数,所有按键读取都添加到这里
 
 ```c
-button_init(&button1, read_button_pin, 0, 0);
+uint8_t read_all_button_GPIO(uint8_t button_id) //在user_multi_button_drive.c
+{
+	switch(button_id)
+	{
+		case btn1_id:
+			return KEY0;  //KEY0 是按键编号对应的读取按键状态函数
+			
+		default:
+			return 0;
+	}
+}
 ```
-3.注册按键事件
+3.添加按键事件处理,只写需要处理的事件
 
 ```c
-button_attach(&button1, SINGLE_CLICK, Callback_SINGLE_CLICK_Handler);
-button_attach(&button1, DOUBLE_CLICK, Callback_DOUBLE_Click_Handler);
+void button1_callback(void *button)
+{
+    uint32_t btn_event_val; 
+    
+    btn_event_val = get_button_event((struct Button *)button); 
+    //printf("btn_event_val=%d\n",btn_event_val);
+    switch(btn_event_val)
+    {
+	    case PRESS_DOWN:
+	        printf("---> key1 press down! <---\r\n"); 
+	    	break; 
+	
+	    case PRESS_UP: 
+	        printf("***> key1 press up! <***\r\n");
+	    	break; 
+	
+	    case PRESS_REPEAT: 
+	        printf("---> key1 press repeat! %d <---\r\n",((struct Button *)button)->repeat);
+	    	break; 
+	
+	    case SINGLE_CLICK: 
+	        printf("---> key1 single click! <---\r\n");
+			Set_Single_io_Drive_State(io_drive1_id,OPEN_AND_CLOSE_LOOP_DELAY,2000,1000,2000);
+	    	break; 
+	
+	    case DOUBLE_CLICK: 
+	        printf("***> key1 double click! <***\r\n");
+			Set_Single_io_Drive_State(io_drive1_id,CLOSE_DEVICE_NO_DELAY,0,0,0);
+	    	break; 
+	
+	    case LONG_PRESS_START: 
+	        printf("---> key1 long press start! <---\r\n");
+	   		break; 
+	
+	    case LONG_PRESS_HOLD: 
+	        printf("***> key1 long press hold! <***\r\n");
+	    	break; 
+	}
+}
 ...
-```
-4.启动按键
+
+4.初始化按键参数
 
 ```c
-button_start(&button1);
+void User_Button_Init(void)
+{
+    //按键IO硬件初始化，在按键的硬件现实文件
+    KEY_Init();
+
+    //初始化按键结构体
+    button_init(&btn1, read_all_button_GPIO, LOW_ACTIVE_LEVEL, btn1_id);
+
+    //注册按钮事件回调函数
+    button_attach(&btn1, PRESS_DOWN,       button1_callback);
+    button_attach(&btn1, PRESS_UP,         button1_callback);
+    button_attach(&btn1, PRESS_REPEAT,     button1_callback);
+    button_attach(&btn1, SINGLE_CLICK,     button1_callback);
+    button_attach(&btn1, DOUBLE_CLICK,     button1_callback);
+    button_attach(&btn1, LONG_PRESS_START, button1_callback);
+    button_attach(&btn1, LONG_PRESS_HOLD,  button1_callback);
+	
+    //启动按键扫描
+    button_start(&btn1);
+}
 ```
 5.设置一个5ms间隔的定时器循环调用后台处理函数
 
@@ -77,56 +147,18 @@ LONG_PRESS_HOLD | 长按期间一直触发
 ## Examples
 
 ```c
-#include "button.h"
+#include "user_multi_button_drive.h"
 
-unit8_t btn1_id = 0;
-
-struct Button btn1;
-
-uint8_t read_button_GPIO(uint8_t button_id)
+int main(void)
 {
-	// you can share the GPIO read function with multiple Buttons
-	switch(button_id)
-	{
-		case btn1_id:
-			return HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
-			break;
+    User_Button_Init();              //初始化按键
+	
 
-		default:
-			return 0;
-			break;
-	}
-}
-void BTN1_PRESS_DOWN_Handler(void* btn)
-{
-	//do something...
-}
-
-void BTN1_PRESS_UP_Handler(void* btn)
-{
-	//do something...
-}
-
-...
-
-int main()
-{
-	button_init(&btn1, read_button_GPIO, 0, btn1_id);
-	button_attach(&btn1, PRESS_DOWN,       BTN1_PRESS_DOWN_Handler);
-	button_attach(&btn1, PRESS_UP,         BTN1_PRESS_UP_Handler);
-	button_attach(&btn1, PRESS_REPEAT,     BTN1_PRESS_REPEAT_Handler);
-	button_attach(&btn1, SINGLE_CLICK,     BTN1_SINGLE_Click_Handler);
-	button_attach(&btn1, DOUBLE_CLICK,     BTN1_DOUBLE_Click_Handler);
-	button_attach(&btn1, LONG_PRESS_START, BTN1_LONG_PRESS_START_Handler);
-	button_attach(&btn2, LONG_PRESS_HOLD,  BTN1_LONG_PRESS_HOLD_Handler);
-	button_start(&btn1);
-
-	//make the timer invoking the button_ticks() interval 5ms.
-	//This function is implemented by yourself.
-	__timer_start(button_ticks, 0, 5);
-
-	while(1)
-	{}
+    while(1)
+    {
+	button_ticks(); //run
+	delay_ms(5);   
+    }
 }
 ```
 
